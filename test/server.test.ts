@@ -18,6 +18,15 @@ describe('server (A2A + JSON-RPC)', () => {
     expect(r.json().status).toBe('ok');
   });
 
+  it('serves a 200 discovery response on GET /', async () => {
+    const r = await app.inject({ method: 'GET', url: '/' });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(body.service).toBe('waterline');
+    expect(body.endpoints.agentCard).toBe('/.well-known/agent-card.json');
+    expect(body.endpoints.rpc.method).toBe('POST');
+  });
+
   it('serves the agent card with the preview skill', async () => {
     const r = await app.inject({ method: 'GET', url: '/.well-known/agent-card.json' });
     expect(r.statusCode).toBe(200);
