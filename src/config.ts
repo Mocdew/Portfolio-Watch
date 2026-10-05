@@ -18,6 +18,13 @@ const schema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_WINDOW: z.string().default('1 minute'),
   RPC_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  // Trust X-Forwarded-* headers. Enable ONLY when running behind a trusted
+  // reverse proxy / platform router (so per-IP rate limiting uses the real
+  // client IP). Off by default so a directly-exposed instance can't be spoofed.
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
 
   // Analysis chain (BSC mainnet, 56)
   ANALYSIS_CHAIN_ID: z.coerce.number().int().default(56),
@@ -44,6 +51,17 @@ export type Config = z.infer<typeof schema> & {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.parse(env);
+
+  // Platforms that inject a canonical external URL (e.g. Render exposes
+  // RENDER_EXTERNAL_URL = "https://<service>.onrender.com") let the agent card
+  // advertise the right address with no manual step. An explicit PUBLIC_URL
+  // always wins; a malformed injected value is ignored.
+  if (!parsed.PUBLIC_URL && env.RENDER_EXTERNAL_URL) {
+    if (z.string().url().safeParse(env.RENDER_EXTERNAL_URL).success) {
+      parsed.PUBLIC_URL = env.RENDER_EXTERNAL_URL;
+    }
+  }
+
   const signingReady = Boolean(
     parsed.AGENT_PRIVATE_KEY &&
       parsed.AGENT_ADDRESS &&

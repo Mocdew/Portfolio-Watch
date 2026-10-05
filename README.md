@@ -53,6 +53,65 @@ npm run build && npm start
 - Agent card: `GET http://localhost:8080/.well-known/agent-card.json`
 - Task endpoint: `POST http://localhost:8080/` (JSON-RPC 2.0)
 
+## Deploy
+
+The service is a single stateless HTTP process — no database, no disk state —
+so it deploys as one container and scales horizontally behind any router. It
+reads `PORT` from the environment (default `8080`) and binds `0.0.0.0`, so it
+works unchanged on platforms that inject a port.
+
+### Docker
+
+```bash
+docker build -t waterline:latest .
+docker run --rm -p 8080:8080 --env-file .env waterline:latest
+```
+
+The image is multi-stage (build → prod deps → runtime), runs as a non-root
+`node` user, and has a built-in `HEALTHCHECK` against `/health`.
+
+### Render (Blueprint)
+
+This repo ships a `render.yaml`, so Render builds the `Dockerfile` for you:
+
+1. Push the repo to GitHub.
+2. In Render: **New → Blueprint**, select the repo, and apply.
+3. That's it. The blueprint sets `TRUST_PROXY=true` and health-checks
+   `/health`, Render injects `PORT`, and `PUBLIC_URL` is auto-derived from
+   Render's `RENDER_EXTERNAL_URL` so the agent card advertises the correct
+   `https://<service>.onrender.com` address — no manual step.
+
+Override `PUBLIC_URL` in the dashboard only if you add a custom domain. The
+not-yet-published paid path needs extra secrets (`AGENT_PRIVATE_KEY`, etc.) —
+add those as **secret** env vars in the Render dashboard when you enable it,
+never in `render.yaml`. On the free plan the service spins down when idle, so
+the first request after a lull is slow; use a paid plan to keep it warm.
+
+### Any other container platform (Fly.io, Railway, Cloud Run, ECS, Kubernetes…)
+
+1. Build and push the image (or point the platform at this repo + `Dockerfile`).
+2. Set environment variables — at minimum:
+   - `PUBLIC_URL` — the public **HTTPS** base URL the service is reachable at.
+     The agent card (`/.well-known/agent-card.json`) advertises this, so A2A
+     clients must see the real address, not `localhost`.
+   - `TRUST_PROXY=true` — these platforms terminate TLS and forward over a
+     proxy, so this is required for the per-IP rate limiter to see the real
+     client IP.
+   - Any analysis/identity values you use (`VENUS_COMPTROLLER_ADDRESS`,
+     `AGENT_ADDRESS`, `AGENT_PRIVATE_KEY`, payment/quote vars). Inject secrets
+     through the platform's secret store — never bake them into the image.
+3. Point the platform's health check at `GET /health`.
+4. Expose the container's port (`8080` unless you override `PORT`).
+
+### Notes
+
+- **TLS:** terminate HTTPS at the platform/proxy; the app speaks plain HTTP
+  behind it. A2A agent cards are expected to be served over HTTPS.
+- **Secrets:** `AGENT_PRIVATE_KEY` is read only from the environment and is
+  redacted from logs — keep it in a secret manager, out of the image and repo.
+- **Config check:** `GET /health` returns `signingReady`, which is `true` only
+  once every value needed to sign a payable quote is present.
+
 ## Sample request / response
 
 ```bash
