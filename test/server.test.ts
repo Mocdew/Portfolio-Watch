@@ -1,0 +1,74 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { buildServer } from '../src/server';
+
+describe('server (A2A + JSON-RPC)', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+
+  beforeAll(async () => {
+    app = await buildServer();
+    await app.ready();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('serves a health check', async () => {
+    const r = await app.inject({ method: 'GET', url: '/health' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().status).toBe('ok');
+  });
+
+  it('serves the agent card with the preview skill', async () => {
+    const r = await app.inject({ method: 'GET', url: '/.well-known/agent-card.json' });
+    expect(r.statusCode).toBe(200);
+    const card = r.json();
+    expect(card.name).toBe('Waterline');
+    expect(card.skills.some((s: { id: string }) => s.id === 'preview')).toBe(true);
+  });
+
+  it('runs preview via JSON-RPC', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/',
+      payload: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'preview',
+        params: {
+          position: [
+            { symbol: 'BNB', kind: 'collateral', amount: 10, priceUsd: 600, collateralFactor: 0.8 },
+            { symbol: 'USDT', kind: 'borrow', amount: 2000, priceUsd: 1 },
+          ],
+        },
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(body.result.healthFactor).toBe('2.4000');
+    const bnb = body.result.assets.find((a: { symbol: string }) => a.symbol === 'BNB');
+    expect(bnb.liquidationPriceUsd).toBe('250');
+  });
+
+  it('rejects a malformed JSON-RPC request deterministically', async () => {
+    const r = await app.inject({ method: 'POST', url: '/', payload: { method: 'preview' } });
+    expect(r.json().error.code).toBe(-32600);
+  });
+
+  it('reports negotiate as not yet implemented with a stable code', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/',
+      payload: { jsonrpc: '2.0', id: 2, method: 'negotiate', params: {} },
+    });
+    expect(r.json().error.data.code).toBe('NOT_IMPLEMENTED');
+  });
+
+  it('returns method-not-found for unknown methods', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/',
+      payload: { jsonrpc: '2.0', id: 3, method: 'does_not_exist' },
+    });
+    expect(r.json().error.code).toBe(-32601);
+  });
+});

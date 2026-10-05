@@ -1,0 +1,33 @@
+{
+  "name": "waterline-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Waterline — evidence-first liquidation-risk analysis for Venus Core-pool lending positions on BNB Smart Chain. A2A agent for Pokter.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.2",
+    "decimal.js": "^10.4.3",
+    "fastify": "^5.2.1",
+    "pino": "^9.6.0",
+    "viem": "^2.21.54",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
