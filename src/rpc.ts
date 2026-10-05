@@ -1,5 +1,6 @@
 import { AppError, JSONRPC_CODES } from './errors';
 import { previewRequest, type PreviewInput } from './service';
+import { rebalanceRequest, type RebalanceInput } from './rebalance-service';
 import { logger } from './logger';
 
 interface JsonRpcRequest {
@@ -32,6 +33,10 @@ export async function handleRpc(body: unknown): Promise<object> {
 
   try {
     switch (req.method) {
+      case 'rebalance':
+      case 'rebalance_plan':
+        return ok(id, rebalanceRequest((req.params ?? {}) as RebalanceInput));
+
       case 'preview':
       case 'analyze':
         return ok(id, await previewRequest((req.params ?? {}) as PreviewInput));

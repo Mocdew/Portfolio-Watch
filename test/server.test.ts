@@ -27,12 +27,39 @@ describe('server (A2A + JSON-RPC)', () => {
     expect(body.endpoints.rpc.method).toBe('POST');
   });
 
-  it('serves the agent card with the preview skill', async () => {
+  it('serves the agent card with the rebalance and preview skills', async () => {
     const r = await app.inject({ method: 'GET', url: '/.well-known/agent-card.json' });
     expect(r.statusCode).toBe(200);
     const card = r.json();
     expect(card.name).toBe('Waterline');
-    expect(card.skills.some((s: { id: string }) => s.id === 'preview')).toBe(true);
+    expect(card.category).toBe('rebalancing');
+    const ids = card.skills.map((s: { id: string }) => s.id);
+    expect(ids).toContain('rebalance');
+    expect(ids).toContain('preview');
+  });
+
+  it('runs rebalance via JSON-RPC', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/',
+      payload: {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'rebalance',
+        params: {
+          portfolio: [
+            { symbol: 'BNB', amount: 10, priceUsd: 600, targetWeight: 0.5 },
+            { symbol: 'USDT', amount: 4000, priceUsd: 1, targetWeight: 0.5 },
+          ],
+          driftThreshold: 0.05,
+        },
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(body.result.schema).toBe('waterline.rebalance.v1');
+    expect(body.result.rebalanceRequired).toBe(true);
+    expect(body.result.turnoverUsd).toBe('1000.00');
   });
 
   it('runs preview via JSON-RPC', async () => {
