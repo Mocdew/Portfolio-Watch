@@ -51,6 +51,17 @@ export type Config = z.infer<typeof schema> & {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.parse(env);
+
+  // Platforms that inject a canonical external URL (e.g. Render exposes
+  // RENDER_EXTERNAL_URL = "https://<service>.onrender.com") let the agent card
+  // advertise the right address with no manual step. An explicit PUBLIC_URL
+  // always wins; a malformed injected value is ignored.
+  if (!parsed.PUBLIC_URL && env.RENDER_EXTERNAL_URL) {
+    if (z.string().url().safeParse(env.RENDER_EXTERNAL_URL).success) {
+      parsed.PUBLIC_URL = env.RENDER_EXTERNAL_URL;
+    }
+  }
+
   const signingReady = Boolean(
     parsed.AGENT_PRIVATE_KEY &&
       parsed.AGENT_ADDRESS &&

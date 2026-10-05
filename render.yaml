@@ -1,0 +1,30 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy: push this repo to GitHub, then in the Render dashboard choose
+# New > Blueprint and select the repo. Render builds the Dockerfile and
+# creates the service below. Subsequent pushes auto-deploy.
+services:
+  - type: web
+    name: waterline
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # 'free' also works but spins down when idle
+    region: oregon         # change to the region nearest your users
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"      # Render routes requests through its proxy
+      # PUBLIC_URL is auto-derived from Render's RENDER_EXTERNAL_URL, so the
+      # agent card advertises the correct https URL with no manual step. Set
+      # PUBLIC_URL explicitly only to override (e.g. a custom domain).
+      #
+      # Render injects PORT automatically; the app binds 0.0.0.0:$PORT.
+      #
+      # The not-yet-published paid path (negotiate / notify_funded) needs more
+      # values. Add them as *secret* env vars in the Render dashboard when you
+      # enable it — never commit them here:
+      #   VENUS_COMPTROLLER_ADDRESS, AGENT_ADDRESS, AGENT_PRIVATE_KEY,
+      #   PAYMENT_TOKEN_ADDRESS, PAYMENT_TOKEN_SYMBOL, QUOTE_VERIFYING_CONTRACT

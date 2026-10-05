@@ -70,7 +70,24 @@ docker run --rm -p 8080:8080 --env-file .env waterline:latest
 The image is multi-stage (build → prod deps → runtime), runs as a non-root
 `node` user, and has a built-in `HEALTHCHECK` against `/health`.
 
-### Any container platform (Fly.io, Render, Railway, Cloud Run, ECS, Kubernetes…)
+### Render (Blueprint)
+
+This repo ships a `render.yaml`, so Render builds the `Dockerfile` for you:
+
+1. Push the repo to GitHub.
+2. In Render: **New → Blueprint**, select the repo, and apply.
+3. That's it. The blueprint sets `TRUST_PROXY=true` and health-checks
+   `/health`, Render injects `PORT`, and `PUBLIC_URL` is auto-derived from
+   Render's `RENDER_EXTERNAL_URL` so the agent card advertises the correct
+   `https://<service>.onrender.com` address — no manual step.
+
+Override `PUBLIC_URL` in the dashboard only if you add a custom domain. The
+not-yet-published paid path needs extra secrets (`AGENT_PRIVATE_KEY`, etc.) —
+add those as **secret** env vars in the Render dashboard when you enable it,
+never in `render.yaml`. On the free plan the service spins down when idle, so
+the first request after a lull is slow; use a paid plan to keep it warm.
+
+### Any other container platform (Fly.io, Railway, Cloud Run, ECS, Kubernetes…)
 
 1. Build and push the image (or point the platform at this repo + `Dockerfile`).
 2. Set environment variables — at minimum:
