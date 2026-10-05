@@ -31,6 +31,20 @@ export async function buildServer() {
     return buildAgentCard(cfg);
   });
 
+  // Friendly root so a GET on the base URL (readiness probes, humans, link
+  // previews) gets a 200 with discovery info instead of a 404. The task
+  // endpoint itself is POST / (JSON-RPC 2.0).
+  app.get('/', async () => ({
+    service: 'waterline',
+    status: 'ok',
+    description: 'A2A liquidation-risk agent. The task endpoint is POST / (JSON-RPC 2.0).',
+    endpoints: {
+      health: '/health',
+      agentCard: '/.well-known/agent-card.json',
+      rpc: { method: 'POST', path: '/', protocol: 'JSON-RPC 2.0' },
+    },
+  }));
+
   app.post('/', async (req) => handleRpc(req.body));
 
   return app;

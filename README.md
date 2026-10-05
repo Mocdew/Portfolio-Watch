@@ -1,27 +1,60 @@
 # Waterline
 
-Evidence-first **liquidation-risk analysis** for [Venus Protocol](https://venus.io)
-Core-pool lending positions on **BNB Smart Chain (chain 56)**. Built as an
+Evidence-first **portfolio rebalancing** and **liquidation-risk analysis** for
+on-chain wallets, with a focus on [Venus Protocol](https://venus.io) Core-pool
+positions on **BNB Smart Chain (chain 56)**. Built as an
 [A2A](https://a2a-protocol.org) agent for the [Pokter](https://pokter.xyz)
-marketplace.
+marketplace (category: **rebalancing**).
 
-Give Waterline a lending position — either explicit collateral/debt legs, or a
-BSC account address — and it returns a machine-readable report with the **health
-factor**, the **exact liquidation price per asset**, the **% buffer**, and a
-**price-shock stress table**. Every number is stamped with its on-chain source
-and block.
+Two skills:
 
-**Read-only. It executes nothing and never moves funds.** Its only signature is
-an off-chain EIP-712 price quote signed with the agent's own wallet.
+- **`rebalance`** — give it a wallet portfolio (holdings with amounts, prices,
+  and target weights) and a **drift threshold**, and it returns a **rebalancing
+  plan**: which assets to buy or sell, the exact trade sizes, the resulting
+  turnover, and whether the drift band is breached at all.
+- **`preview`** — give it a Venus lending position (explicit collateral/debt
+  legs, or a BSC account address) and it returns the **health factor**, the
+  **exact liquidation price per asset**, the **% buffer**, and a **price-shock
+  stress table**, every number stamped with its on-chain source and block.
 
-> **Status:** the risk engine and the dry-run `preview` skill are complete and
-> tested. The paid `negotiate` / `notify_funded` skills and the on-chain
-> (ERC-8183) delivery are being wired against the Pokter reference agent-card
-> contract and are not published in the card until confirmed. The on-chain
-> account-read path (`venus.ts`) is implemented but marked **LIVE-VERIFICATION
-> REQUIRED** — the explicit-position preview needs no RPC and is fully tested.
+**Read-only. It proposes trades, executes nothing, and never moves funds.** Its
+only signature is an off-chain EIP-712 price quote signed with the agent's own
+wallet.
+
+> **Status:** the rebalancing engine (`rebalance`) and the dry-run risk engine
+> (`preview`) are complete and tested. The paid `negotiate` / `notify_funded`
+> skills and the on-chain (ERC-8183) delivery are being wired against the Pokter
+> reference agent-card contract and are not published in the card until
+> confirmed. The on-chain account-read path (`venus.ts`) is implemented but
+> marked **LIVE-VERIFICATION REQUIRED** — the explicit-input skills need no RPC
+> and are fully tested.
 
 ## What it computes
+
+### Rebalancing (`rebalance`)
+
+Each holding's current weight is its USD value over the portfolio total. A
+rebalance is proposed **only** when some asset's weight drifts from its target
+by more than the drift threshold (in percentage points). When triggered, every
+asset is traded back to its exact target weight, so buys net against sells.
+
+```
+driftᵢ = currentWeightᵢ − targetWeightᵢ        # rebalance if max |driftᵢ| > threshold
+tradeᵢ = totalValue × targetWeightᵢ − valueᵢ    # + buy, − sell
+```
+
+### Liquidation risk (`preview`)
+
+```
+Health factor (HF) = Σ(collateralᵢ × priceᵢ × collateralFactorᵢ) / Σ(borrowⱼ × priceⱼ)
+```
+
+Venus is a Compound fork, so each market's collateral factor is also its
+liquidation threshold. `HF < 1` means the position is liquidatable.
+
+- **Per-collateral liquidation price** — the price an asset must fall to for HF = 1.
+- **Per-borrow liquidation price** — the price a borrowed asset must rise to for HF = 1.
+- **Stress table** — HF and shortfall after a uniform downward shock to collateral prices.
 
 ```
 Health factor (HF) = Σ(collateralᵢ × priceᵢ × collateralFactorᵢ) / Σ(borrowⱼ × priceⱼ)
@@ -112,7 +145,55 @@ the first request after a lull is slow; use a paid plan to keep it warm.
 - **Config check:** `GET /health` returns `signingReady`, which is `true` only
   once every value needed to sign a payable quote is present.
 
-## Sample request / response
+## Sample: `rebalance`
+
+```bash
+curl -s http://localhost:8080/ \
+  -H 'content-type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "rebalance",
+    "params": {
+      "portfolio": [
+        { "symbol": "BNB",  "amount": 10,   "priceUsd": 600, "targetWeight": 0.5 },
+        { "symbol": "USDT", "amount": 4000, "priceUsd": 1,   "targetWeight": 0.5 }
+      ],
+      "driftThreshold": 0.05
+    }
+  }'
+```
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "schema": "waterline.rebalance.v1",
+    "chainId": 56,
+    "policy": { "type": "drift-threshold", "driftThresholdPct": "5.00" },
+    "portfolioValueUsd": "10000.00",
+    "rebalanceRequired": true,
+    "maxDriftPct": "10.00",
+    "turnoverUsd": "1000.00",
+    "turnoverPct": "10.00",
+    "assets": [
+      { "symbol": "BNB",  "currentWeightPct": "60.00", "targetWeightPct": "50.00", "driftPct": "10.00",  "breached": true, "action": "sell", "tradeUsd": "-1000.00", "tradeAmount": "-1.66666667" },
+      { "symbol": "USDT", "currentWeightPct": "40.00", "targetWeightPct": "50.00", "driftPct": "-10.00", "breached": true, "action": "buy",  "tradeUsd": "1000.00",  "tradeAmount": "1000" }
+    ],
+    "verdict": "Rebalance recommended: max drift 10.00% exceeds the 5.00% threshold. Proposed turnover $1000.00.",
+    "dataSources": [ /* source + chain per value */ ],
+    "assumptions": [ /* ... */ ],
+    "limitations": [ /* ... */ ],
+    "disclaimer": "Waterline produces a read-only, point-in-time rebalancing plan ..."
+  }
+}
+```
+
+Omit `targetWeight` on every holding for an equal-weight target; omit
+`driftThreshold` to use the 5% default.
+
+## Sample: `preview`
 
 ```bash
 curl -s http://localhost:8080/ \
