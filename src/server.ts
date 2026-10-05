@@ -11,6 +11,7 @@ export async function buildServer() {
     loggerInstance: logger,
     requestTimeout: cfg.RPC_TIMEOUT_MS + 2000,
     bodyLimit: 256 * 1024,
+    trustProxy: cfg.TRUST_PROXY,
   });
 
   await app.register(rateLimit, {

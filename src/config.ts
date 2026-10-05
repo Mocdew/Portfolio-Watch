@@ -18,6 +18,13 @@ const schema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_WINDOW: z.string().default('1 minute'),
   RPC_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  // Trust X-Forwarded-* headers. Enable ONLY when running behind a trusted
+  // reverse proxy / platform router (so per-IP rate limiting uses the real
+  // client IP). Off by default so a directly-exposed instance can't be spoofed.
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
 
   // Analysis chain (BSC mainnet, 56)
   ANALYSIS_CHAIN_ID: z.coerce.number().int().default(56),
